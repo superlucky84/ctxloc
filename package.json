@@ -1,0 +1,47 @@
+{
+  "name": "ctxloc",
+  "version": "0.1.0",
+  "description": "Minimal deterministic CLI to store/load ctx locally and sync with ctxbin Upstash storage",
+  "author": "superlucky84",
+  "license": "MIT",
+  "type": "commonjs",
+  "bin": {
+    "ctxloc": "dist/cli.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/superlucky84/ctxloc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/superlucky84/ctxloc/issues"
+  },
+  "homepage": "https://github.com/superlucky84/ctxloc",
+  "keywords": [
+    "cli",
+    "context",
+    "ctx",
+    "local",
+    "sync",
+    "ctxbin"
+  ],
+  "files": [
+    "dist",
+    "DESIGN.md",
+    "IMPLEMENT.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "pnpm build && node --test",
+    "clean": "pnpm clean:dist && pnpm clean:module",
+    "clean:dist": "rm -rf dist",
+    "clean:module": "rm -rf dist node_modules"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0"
+  }
+}
