@@ -10,6 +10,7 @@ Primary outcomes:
 2. Support only `ctx` resource operations.
 3. Add deterministic bidirectional sync between local `ctxloc` storage and remote `ctxbin` storage.
 4. Resolve conflicts by comparing metadata timestamps and keeping the newest value on both sides.
+5. Keep `ctxbin` unaware of `ctxloc`; sync entrypoint is `ctxloc sync` only.
 
 ## 2. Scope and Non-Goals
 
@@ -24,6 +25,7 @@ Out of scope:
 1. `agent` commands.
 2. `skill` commands.
 3. Semantic retrieval, embeddings, or RAG features.
+4. Adding `sync` command support to `ctxbin`.
 
 ## 3. Runtime and Distribution
 
@@ -107,20 +109,21 @@ Behavior notes:
 2. `save` always injects fresh metadata (`savedAt`, optional `by`).
 3. `load` prints body by default and metadata+body when `--meta` is used.
 4. `list` prints lexicographically sorted keys.
+5. Sync is exposed only as `ctxloc sync`; `ctxbin sync` is intentionally unsupported.
 
 ## 7. Sync Architecture
 
-Sync must work the same way from either entrypoint:
+Sync entrypoint policy:
 
 1. `npx ctxloc sync`
-2. `npx ctxbin sync`
+2. `npx ctxbin sync` is not part of the design and must remain unsupported.
 
 Recommended structure:
 
 1. Shared core module: metadata parsing, comparison, and merge planning.
 2. Local adapter: `ctxloc` file store.
 3. Remote adapter: Upstash `ctx` hash (`ctxbin` backend).
-4. Thin command wrappers in both CLIs.
+4. Single command wrapper in `ctxloc` only.
 
 Remote credentials resolution:
 

@@ -6,6 +6,7 @@
 - [ ] Keep metadata envelope format exactly `ctxbin-meta@1`.
 - [ ] Keep sync conflict resolution deterministic.
 - [ ] Treat metadata-bearing value as winner against metadata-missing legacy value.
+- [ ] Keep `ctxbin` unchanged and unaware of `ctxloc` sync features.
 - [ ] Treat tests as release gates, not optional tasks.
 
 ## Phase 0 - Foundation and Contracts
@@ -121,23 +122,21 @@
 - [ ] End-to-end sync where remote has legacy raw ctx (no metadata) and local has metadata value; local must win and overwrite remote.
 - [ ] Re-run sync test reports zero writes after convergence.
 
-## Phase 6 - `ctxbin sync` Command Integration
+## Phase 6 - `ctxbin` Isolation Guarantee
 
 ### Implementation Checklist
 
-- [ ] Add `sync` command entrypoint to `ctxbin` CLI.
-- [ ] Reuse the same shared sync engine logic used by `ctxloc`.
-- [ ] Keep output summary shape and conflict rules identical to `ctxloc sync`.
-- [ ] Ensure existing `ctxbin` commands are not regressed.
+- [ ] Do not add `sync` command support to `ctxbin`.
+- [ ] Keep all sync orchestration code in `ctxloc` only.
+- [ ] Keep remote communication protocol compatible with existing `ctxbin` storage (`ctx` hash + metadata format).
+- [ ] Ensure existing `ctxbin` commands are not changed by `ctxloc` work.
 
 ### Required Tests
 
-- [ ] `ctxbin sync` and `ctxloc sync` parity test:
-- [ ] Given identical initial state, both commands produce same final data.
-- [ ] Given identical initial state, both commands produce equivalent stats.
-- [ ] Given legacy no-metadata remote record vs metadata local record, both commands pick metadata side as winner.
+- [ ] `ctxbin` unsupported-command test: `ctxbin sync` must fail as unknown/unsupported command.
 - [ ] Backward compatibility test for existing `ctxbin ctx load/save/delete/list`.
-- [ ] Regression test for metadata behavior in non-sync commands.
+- [ ] Regression test for metadata behavior in `ctxbin` non-sync commands.
+- [ ] `ctxloc sync` still converges correctly against Upstash data written by `ctxbin`.
 
 ## Phase 7 - Deep Test Hardening (Post-Major-Phase Reinforcement)
 
