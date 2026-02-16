@@ -101,3 +101,15 @@ test("ctx commands fail fast on malformed local store JSON", () => {
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /CTXLOC_ERR IO: invalid JSON in store file/);
 });
+
+test("help and --help print bundled ctxloc skill", () => {
+  let result = runCli(["help"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /name: ctxloc/);
+  assert.match(result.stdout, /# ctxloc Skill/);
+
+  result = runCli(["--help"]);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /name: ctxloc/);
+  assert.match(result.stdout, /# ctxloc Skill/);
+});

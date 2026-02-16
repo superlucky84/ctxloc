@@ -1,5 +1,7 @@
 import process from "node:process";
 import { parseArgs } from "node:util";
+import path from "node:path";
+import fs from "node:fs/promises";
 import { createCtxbinRemoteStore } from "./ctxbin-remote";
 import { formatError, fail } from "./errors";
 import { inferCtxKey } from "./git";
@@ -58,7 +60,11 @@ async function main(): Promise<void> {
     if (resource === "help" && (command || keyArg || extra.length > 0)) {
       return fail("INVALID_INPUT", "help does not accept additional arguments");
     }
-    printHelp();
+    const content = await loadBundledSkill();
+    if (!content) {
+      return fail("IO", "bundled skill not found");
+    }
+    process.stdout.write(content);
     return;
   }
 
@@ -244,19 +250,20 @@ function ensureNoSyncFlags(opts: CliOptions): void {
   }
 }
 
-function printHelp(): void {
-  process.stdout.write(
-    [
-      "ctxloc usage",
-      "",
-      "ctxloc ctx load [key] [--meta]",
-      "ctxloc ctx save [key] [--file <path> | --value <text> | stdin] [--append] [--by <actor>]",
-      "ctxloc ctx delete [key]",
-      "ctxloc ctx list",
-      "ctxloc sync",
-      "ctxloc --version",
-    ].join("\n") + "\n"
-  );
+async function loadBundledSkill(): Promise<string | null> {
+  const candidates = [
+    path.resolve(__dirname, "skills", "ctxloc", "SKILL.md"),
+    path.resolve(__dirname, "..", "skills", "ctxloc", "SKILL.md"),
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      return await fs.readFile(candidate, "utf8");
+    } catch {
+      // try next path
+    }
+  }
+  return null;
 }
 
 main().catch((err) => {

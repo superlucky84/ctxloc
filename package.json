@@ -26,11 +26,12 @@
   ],
   "files": [
     "dist",
+    "skills",
     "DESIGN.md",
     "IMPLEMENT.md"
   ],
   "scripts": {
-    "build": "tsup",
+    "build": "tsup && node scripts/copy-skills.js",
     "test": "pnpm build && node --test",
     "clean": "pnpm clean:dist && pnpm clean:module",
     "clean:dist": "rm -rf dist",
