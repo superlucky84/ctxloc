@@ -6,6 +6,28 @@ Docs: https://superlucky84.github.io/ctxloc/
 
 > **Core idea:** keep working context local by default, then converge with remote storage only when needed.
 
+## Agent workflow (core)
+
+This is the most important usage. Let agents consistently save and load branch context.
+
+### Option 1: Zero-setup (simplest)
+
+Ask your AI agent directly:
+
+```text
+"Run `npx ctxloc help`, read the output, then save the current context."
+```
+
+### Option 2: Add-on snippet
+
+For consistent behavior across sessions, use the add-on block from docs:
+
+- Guide: https://superlucky84.github.io/ctxloc/#/guide/agent-addon
+- Then ask:
+  - "Use npx ctxloc to save the current context."
+  - "Use npx ctxloc to load the current context."
+  - "Run npx ctxloc sync."
+
 ## Relationship to ctxbin
 
 - `ctxbin` is the remote-storage-oriented CLI.
