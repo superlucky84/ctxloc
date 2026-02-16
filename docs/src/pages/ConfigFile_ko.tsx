@@ -14,6 +14,12 @@ export const ConfigFileKo = mount(() => {
       <h2>폴백 파일 경로</h2>
       <CodeBlock language="text" code={`~/.ctxbin/config.json`} />
 
+      <h2>권장 설정 방법</h2>
+      <CodeBlock
+        language="bash"
+        code={`npx ctxbin init`}
+      />
+
       <h2>기대 형식</h2>
       <CodeBlock
         language="json"

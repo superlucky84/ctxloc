@@ -10,7 +10,7 @@ export const QuickStart = mount(() => {
       <h2>Prerequisites</h2>
       <ul>
         <li>Node.js 18+</li>
-        <li>Optional: Upstash credentials for remote sync</li>
+        <li>Optional for sync: Upstash credentials (ctxbin-compatible)</li>
       </ul>
 
       <h2>1. Save Local Context</h2>
@@ -29,8 +29,16 @@ $ npx ctxloc ctx list`}
 
       <h2>3. Sync with Remote (ctxbin storage)</h2>
       <p>
-        To sync with remote, provide Upstash credentials using <code>CTXBIN_STORE_URL</code> and <code>CTXBIN_STORE_TOKEN</code>,
-        or keep them in <code>~/.ctxbin/config.json</code>.
+        Before first sync, set remote credentials once with <code>npx ctxbin init</code>.
+        It writes <code>~/.ctxbin/config.json</code>, which <code>ctxloc sync</code> can read.
+      </p>
+      <CodeBlock
+        language="bash"
+        code={`$ npx ctxbin init
+$ npx ctxloc sync`}
+      />
+      <p>
+        Or provide credentials directly through environment variables:
       </p>
       <CodeBlock
         language="bash"

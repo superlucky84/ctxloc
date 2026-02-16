@@ -11,6 +11,15 @@ export const ConfigEnvKo = mount(() => {
         원격 자격증명은 <code>ctxloc sync</code>에서만 필요합니다.
       </p>
 
+      <h2>1회 설정(권장)</h2>
+      <CodeBlock
+        language="bash"
+        code={`npx ctxbin init`}
+      />
+      <p>
+        위 명령은 <code>~/.ctxbin/config.json</code>을 생성하며, <code>ctxloc sync</code>가 이를 폴백으로 읽습니다.
+      </p>
+
       <h2>sync에서 사용하는 변수</h2>
       <CodeBlock
         language="bash"

@@ -90,6 +90,19 @@ npx ctxloc ctx load --meta
 
 ## Sync Usage
 
+### Sync prerequisite (one-time remote setup)
+
+`ctxloc sync` requires access to the same Upstash Redis store used by `ctxbin`.
+
+Set credentials once with:
+
+```bash
+npx ctxbin init
+```
+
+This writes `~/.ctxbin/config.json`, which `ctxloc sync` can read as fallback.
+Local `ctxloc ctx` commands still work without remote setup.
+
 ```bash
 npx ctxloc sync
 ```

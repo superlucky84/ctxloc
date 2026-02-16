@@ -14,6 +14,12 @@ export const ConfigFile = mount(() => {
       <h2>Fallback File</h2>
       <CodeBlock language="text" code={`~/.ctxbin/config.json`} />
 
+      <h2>Recommended Setup</h2>
+      <CodeBlock
+        language="bash"
+        code={`npx ctxbin init`}
+      />
+
       <h2>Expected Format</h2>
       <CodeBlock
         language="json"

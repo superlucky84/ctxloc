@@ -11,6 +11,15 @@ export const ConfigEnv = mount(() => {
         Remote credentials are required only for <code>ctxloc sync</code>.
       </p>
 
+      <h2>One-time Setup (Recommended)</h2>
+      <CodeBlock
+        language="bash"
+        code={`npx ctxbin init`}
+      />
+      <p>
+        This writes <code>~/.ctxbin/config.json</code>, which <code>ctxloc sync</code> reads as fallback.
+      </p>
+
       <h2>Variables Used for Sync</h2>
       <CodeBlock
         language="bash"

@@ -10,7 +10,7 @@ export const QuickStartKo = mount(() => {
       <h2>사전 준비</h2>
       <ul>
         <li>Node.js 18+</li>
-        <li>원격 동기화 시 Upstash 자격증명</li>
+        <li>동기화 시 Upstash 자격증명(ctxbin 호환)</li>
       </ul>
 
       <h2>1. 로컬 컨텍스트 저장</h2>
@@ -29,8 +29,16 @@ $ npx ctxloc ctx list`}
 
       <h2>3. 원격 동기화 (ctxbin 저장소)</h2>
       <p>
-        원격 동기화 시 <code>CTXBIN_STORE_URL</code>, <code>CTXBIN_STORE_TOKEN</code>을 사용하거나
-        <code>~/.ctxbin/config.json</code>을 사용합니다.
+        첫 sync 전에 <code>npx ctxbin init</code>으로 원격 자격증명을 1회 설정하세요.
+        이 명령은 <code>~/.ctxbin/config.json</code>을 생성하며 <code>ctxloc sync</code>가 폴백으로 읽습니다.
+      </p>
+      <CodeBlock
+        language="bash"
+        code={`$ npx ctxbin init
+$ npx ctxloc sync`}
+      />
+      <p>
+        또는 환경 변수로 직접 전달할 수 있습니다.
       </p>
       <CodeBlock
         language="bash"
