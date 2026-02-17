@@ -3,10 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { fail } from "./errors";
 
-type StoreData = {
-  ctx: Record<string, string>;
-};
-
 export type StoreEntry = { key: string; value: string };
 
 export interface CtxStore {
@@ -17,101 +13,141 @@ export interface CtxStore {
 }
 
 const STORE_PATH_ENV = "CTXLOC_STORE_PATH";
+const ENTRY_FILE_EXT = ".ctx";
 
 export function resolveStorePath(): string {
   const envPath = process.env[STORE_PATH_ENV];
   if (envPath && envPath.trim()) return envPath;
-  return path.join(os.homedir(), ".ctxloc", "store.json");
+  return path.join(os.homedir(), ".ctxloc", "store");
 }
 
 export function createLocalStore(storePath: string = resolveStorePath()): CtxStore {
   return {
     async get(key: string): Promise<string | null> {
-      const data = await readStoreData(storePath);
-      return data.ctx[key] ?? null;
+      return readEntryFile(entryPath(storePath, key));
     },
     async set(key: string, value: string): Promise<void> {
-      const data = await readStoreData(storePath);
-      data.ctx[key] = value;
-      await writeStoreData(storePath, data);
+      await ensureStoreDir(storePath);
+      await writeEntryFile(entryPath(storePath, key), value);
     },
     async delete(key: string): Promise<void> {
-      const data = await readStoreData(storePath);
-      delete data.ctx[key];
-      await writeStoreData(storePath, data);
+      await deleteEntryFile(entryPath(storePath, key));
     },
     async list(): Promise<StoreEntry[]> {
-      const data = await readStoreData(storePath);
-      return Object.entries(data.ctx)
-        .map(([key, value]) => ({ key, value }))
-        .sort((a, b) => a.key.localeCompare(b.key));
+      const entries = await listEntryFiles(storePath);
+      return entries.sort((a, b) => a.key.localeCompare(b.key));
     },
   };
 }
 
-async function readStoreData(storePath: string): Promise<StoreData> {
-  let raw: string;
+function entryPath(storeDir: string, key: string): string {
+  return path.join(storeDir, `${encodeKey(key)}${ENTRY_FILE_EXT}`);
+}
+
+function encodeKey(key: string): string {
+  if (!key) {
+    return fail("INVALID_INPUT", "ctx key must not be empty");
+  }
+  return Buffer.from(key, "utf8").toString("base64url");
+}
+
+function decodeKey(fileName: string, storeDir: string): string {
+  if (!fileName.endsWith(ENTRY_FILE_EXT)) {
+    return fail("IO", `invalid store entry filename: ${path.join(storeDir, fileName)}`);
+  }
+
+  const encoded = fileName.slice(0, -ENTRY_FILE_EXT.length);
+  if (!encoded) {
+    return fail("IO", `invalid store entry filename: ${path.join(storeDir, fileName)}`);
+  }
+
+  const decoded = Buffer.from(encoded, "base64url").toString("utf8");
+
+  if (Buffer.from(decoded, "utf8").toString("base64url") !== encoded) {
+    return fail("IO", `invalid key filename in store: ${path.join(storeDir, fileName)}`);
+  }
+
+  return decoded;
+}
+
+async function readEntryFile(filePath: string): Promise<string | null> {
   try {
-    raw = await fs.readFile(storePath, "utf8");
+    return await fs.readFile(filePath, "utf8");
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return { ctx: {} };
-    }
-    return fail("IO", `failed to read store file: ${storePath}`);
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return null;
+    return fail("IO", `failed to read store entry: ${filePath}`);
   }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return fail("IO", `invalid JSON in store file: ${storePath}`);
-  }
-  return normalizeStoreData(parsed, storePath);
 }
 
-function normalizeStoreData(parsed: unknown, storePath: string): StoreData {
-  if (!parsed || typeof parsed !== "object") {
-    return fail("IO", `invalid store shape in file: ${storePath}`);
+async function deleteEntryFile(filePath: string): Promise<void> {
+  try {
+    await fs.unlink(filePath);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return;
+    return fail("IO", `failed to delete store entry: ${filePath}`);
   }
-
-  const ctx = (parsed as { ctx?: unknown }).ctx;
-  if (ctx === undefined) {
-    return { ctx: {} };
-  }
-  if (!ctx || typeof ctx !== "object" || Array.isArray(ctx)) {
-    return fail("IO", `invalid store shape in file: ${storePath}`);
-  }
-
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(ctx as Record<string, unknown>)) {
-    if (typeof value !== "string") {
-      return fail("IO", `invalid value type for key "${key}" in store file: ${storePath}`);
-    }
-    out[key] = value;
-  }
-  return { ctx: out };
 }
 
-async function writeStoreData(storePath: string, data: StoreData): Promise<void> {
-  const dir = path.dirname(storePath);
+async function listEntryFiles(storeDir: string): Promise<StoreEntry[]> {
+  let dirEntries: fs.Dirent[];
   try {
-    await fs.mkdir(dir, { recursive: true, mode: 0o700 });
-  } catch {
-    return fail("IO", `failed to create store directory: ${dir}`);
+    dirEntries = await fs.readdir(storeDir, { withFileTypes: true });
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT") return [];
+    return fail("IO", `failed to read store directory: ${storeDir}`);
   }
 
-  const tmpPath = `${storePath}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const body = JSON.stringify(data, null, 2);
+  const out: StoreEntry[] = [];
+
+  for (const dirEntry of dirEntries) {
+    if (!dirEntry.isFile()) continue;
+    if (!dirEntry.name.endsWith(ENTRY_FILE_EXT)) continue;
+
+    const key = decodeKey(dirEntry.name, storeDir);
+    const filePath = path.join(storeDir, dirEntry.name);
+
+    let value: string;
+    try {
+      value = await fs.readFile(filePath, "utf8");
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") continue;
+      return fail("IO", `failed to read store entry: ${filePath}`);
+    }
+
+    out.push({ key, value });
+  }
+
+  return out;
+}
+
+async function ensureStoreDir(storeDir: string): Promise<void> {
+  try {
+    await fs.mkdir(storeDir, { recursive: true, mode: 0o700 });
+  } catch {
+    return fail("IO", `failed to create store directory: ${storeDir}`);
+  }
+}
+
+async function writeEntryFile(filePath: string, value: string): Promise<void> {
+  const dir = path.dirname(filePath);
+  const tmpPath = path.join(
+    dir,
+    `.tmp-${path.basename(filePath)}-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  );
 
   try {
-    await fs.writeFile(tmpPath, body, "utf8");
-    await fs.rename(tmpPath, storePath);
+    await fs.writeFile(tmpPath, value, "utf8");
+    await fs.rename(tmpPath, filePath);
   } catch {
     try {
       await fs.unlink(tmpPath);
     } catch {
       // ignore cleanup error
     }
-    return fail("IO", `failed to write store file: ${storePath}`);
+    return fail("IO", `failed to write store entry: ${filePath}`);
   }
 }

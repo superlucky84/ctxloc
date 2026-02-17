@@ -7,16 +7,14 @@ export const StorageModel = mount(() => {
       <h1>Storage Model</h1>
 
       <h2>Local Store (Primary)</h2>
-      <p>ctxloc stores ctx in a local JSON file.</p>
+      <p>ctxloc stores each ctx key as one local file.</p>
       <CodeBlock
-        language="json"
-        code={`{
-  "ctx": {
-    "my-project/main": "ctxbin-meta@1\\n{...}\\n---\\nbody"
-  }
-}`}
+        language="text"
+        code={`Directory: ~/.ctxloc/store/
+File     : {base64url(key)}.ctx
+Content  : metadata envelope + body`}
       />
-      <CodeBlock language="text" code={`Default path: ~/.ctxloc/store.json`} />
+      <CodeBlock language="text" code={`Example key: my-project/main`} />
 
       <h2>Remote Store (Sync Target)</h2>
       <p>

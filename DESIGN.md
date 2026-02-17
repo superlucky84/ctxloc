@@ -70,27 +70,26 @@ When `ctx` key is omitted, key inference must match `ctxbin` behavior:
 
 ## 5. Local Storage Model
 
-Local storage is a single JSON file.
+Local storage uses a file-per-key directory layout.
 
 Default path:
 
-1. `~/.ctxloc/store.json`
+1. `~/.ctxloc/store/`
 
-File shape:
+File layout:
 
-```json
-{
-  "ctx": {
-    "my-project/main": "ctxbin-meta@1\n{\"savedAt\":\"...\"}\n---\n..."
-  }
-}
+```text
+~/.ctxloc/store/
+  {base64url(key)}.ctx   # one file per key
 ```
+
+Each `.ctx` file contains the raw ctx value (metadata envelope + body).
 
 Write guarantees:
 
 1. Use temp-file + atomic rename.
-2. Create file automatically if missing.
-3. Fail fast on malformed JSON; do not auto-repair silently.
+2. Create store directory automatically if missing.
+3. Fail fast on I/O or filesystem errors.
 4. Preserve UTF-8 content exactly.
 
 ## 6. CLI Surface

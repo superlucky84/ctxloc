@@ -8,12 +8,13 @@ import { inferCtxKey } from "./git";
 import { resolveSaveInput } from "./input";
 import { createLocalStore } from "./local-store";
 import { extractMetadata, formatMetadataBlock, injectMetadata, stripMetadata } from "./metadata";
-import { planSync } from "./sync-core";
+import { planSync, type MissingPolicy } from "./sync-core";
 import { getVersion } from "./version";
 
 type CliOptions = {
   append: boolean;
   meta: boolean;
+  missing?: MissingPolicy;
   by?: string;
   file?: string;
   value?: string;
@@ -31,6 +32,7 @@ async function main(): Promise<void> {
         meta: { type: "boolean" },
         by: { type: "string" },
         file: { type: "string" },
+        missing: { type: "string" },
         value: { type: "string" },
         version: { type: "boolean", short: "v" },
         help: { type: "boolean", short: "h" },
@@ -49,6 +51,7 @@ async function main(): Promise<void> {
   const opts: CliOptions = {
     append: Boolean(values.append),
     meta: Boolean(values.meta),
+    missing: parseMissingPolicy(values.missing as string | undefined),
     by: values.by as string | undefined,
     file: values.file as string | undefined,
     value: values.value as string | undefined,
@@ -77,8 +80,12 @@ async function main(): Promise<void> {
       return fail("INVALID_INPUT", "sync does not accept positional arguments");
     }
     ensureNoSyncFlags(opts);
-    await handleSync();
+    await handleSync(opts.missing ?? "copy");
     return;
+  }
+
+  if (opts.missing) {
+    return fail("INVALID_INPUT", "--missing is only valid for sync");
   }
 
   if (resource !== "ctx") {
@@ -168,34 +175,49 @@ async function handleList(store: ReturnType<typeof createLocalStore>): Promise<v
   process.stdout.write(entries.map((entry) => `${entry.key}\t--value`).join("\n") + "\n");
 }
 
-async function handleSync(): Promise<void> {
+async function handleSync(missingPolicy: MissingPolicy): Promise<void> {
   const localStore = createLocalStore();
   const remoteStore = createCtxbinRemoteStore();
 
   const localEntries = await localStore.list();
   const remoteEntries = await remoteStore.list();
-  const planned = planSync(localEntries, remoteEntries);
+  const planned = planSync(localEntries, remoteEntries, { missing: missingPolicy });
 
   let appliedLocal = 0;
   let appliedRemote = 0;
+  let deletedLocal = 0;
+  let deletedRemote = 0;
 
   try {
     for (const op of planned.operations) {
-      if (!op.winningValue) continue;
       if (op.writeLocal) {
+        if (op.winningValue === null) {
+          return fail("IO", `invalid sync plan: writeLocal without winningValue for key ${op.key}`);
+        }
         await localStore.set(op.key, op.winningValue);
         appliedLocal += 1;
       }
       if (op.writeRemote) {
+        if (op.winningValue === null) {
+          return fail("IO", `invalid sync plan: writeRemote without winningValue for key ${op.key}`);
+        }
         await remoteStore.set(op.key, op.winningValue);
         appliedRemote += 1;
+      }
+      if (op.deleteLocal) {
+        await localStore.delete(op.key);
+        deletedLocal += 1;
+      }
+      if (op.deleteRemote) {
+        await remoteStore.delete(op.key);
+        deletedRemote += 1;
       }
     }
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     return fail(
       "IO",
-      `sync apply failed after remote_to_local=${appliedLocal}, local_to_remote=${appliedRemote}: ${reason}`
+      `sync apply failed after remote_to_local=${appliedLocal}, local_to_remote=${appliedRemote}, local_deleted=${deletedLocal}, remote_deleted=${deletedRemote}: ${reason}`
     );
   }
 
@@ -206,6 +228,8 @@ function formatSyncSummary(stats: {
   scanned: number;
   localToRemote: number;
   remoteToLocal: number;
+  localDeleted: number;
+  remoteDeleted: number;
   conflicts: number;
   skipped: number;
 }): string {
@@ -213,6 +237,8 @@ function formatSyncSummary(stats: {
     `scanned: ${stats.scanned}`,
     `local_to_remote: ${stats.localToRemote}`,
     `remote_to_local: ${stats.remoteToLocal}`,
+    `local_deleted: ${stats.localDeleted}`,
+    `remote_deleted: ${stats.remoteDeleted}`,
     `conflicts: ${stats.conflicts}`,
     `skipped: ${stats.skipped}`,
   ].join("\n") + "\n";
@@ -248,6 +274,16 @@ function ensureNoSyncFlags(opts: CliOptions): void {
   if (opts.append || opts.meta || opts.by || opts.file || opts.value) {
     return fail("INVALID_INPUT", "sync does not accept flags");
   }
+}
+
+function parseMissingPolicy(value: string | undefined): MissingPolicy | undefined {
+  if (value === undefined) return undefined;
+
+  if (value === "copy" || value === "delete" || value === "skip") {
+    return value;
+  }
+
+  return fail("INVALID_INPUT", '--missing must be one of: "copy", "delete", "skip"');
 }
 
 async function loadBundledSkill(): Promise<string | null> {

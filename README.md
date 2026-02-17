@@ -41,7 +41,7 @@ GitHub:
 ## Features
 
 - `ctx`-only command surface (`load`, `save`, `delete`, `list`)
-- Local JSON store (`~/.ctxloc/store.json`) with atomic writes
+- Local file-per-key store (`~/.ctxloc/store/`) with atomic writes
 - Git-based key inference (`{project}/{branch}`) matching ctxbin behavior
 - Metadata-compatible value envelope (`ctxbin-meta@1`)
 - Deterministic sync conflict rules (including legacy no-metadata handling)
@@ -107,6 +107,24 @@ Local `ctxloc ctx` commands still work without remote setup.
 npx ctxloc sync
 ```
 
+### Missing-key policy
+
+By default, one-sided keys are copied to the missing side:
+
+```bash
+npx ctxloc sync --missing copy
+```
+
+You can change this behavior:
+
+```bash
+# delete one-sided keys from the side where they exist
+npx ctxloc sync --missing delete
+
+# keep one-sided keys unchanged on each side
+npx ctxloc sync --missing skip
+```
+
 ### Remote credentials for sync
 
 `ctxloc sync` resolves credentials in this order:
@@ -127,6 +145,7 @@ npx ctxloc sync
 Per key:
 
 1. If one side only exists, copy it to the other side.
+   - This can be changed with `--missing delete` or `--missing skip`.
 2. If both metadata parse, newer `savedAt` wins.
 3. If one side has valid metadata and the other is legacy/no-metadata, metadata side wins.
 4. If timestamps are equal but values differ, remote side wins (deterministic tie-break).

@@ -20,13 +20,26 @@ function makeTempDir() {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ctxloc-test-"));
 }
 
+function countStoreEntryFiles(storePath) {
+  try {
+    return fs
+      .readdirSync(storePath)
+      .filter((fileName) => fileName.endsWith(".ctx"))
+      .length;
+  } catch (err) {
+    if (err && err.code === "ENOENT") return 0;
+    throw err;
+  }
+}
+
 test("ctx save/load/list/delete flow with explicit key", () => {
   const dir = makeTempDir();
-  const storePath = path.join(dir, "store.json");
+  const storePath = path.join(dir, "store");
   const env = { CTXLOC_STORE_PATH: storePath };
 
   let result = runCli(["ctx", "save", "demo/main", "--value", "hello"], { env });
   assert.equal(result.status, 0, result.stderr);
+  assert.equal(countStoreEntryFiles(storePath), 1);
 
   result = runCli(["ctx", "load", "demo/main"], { env });
   assert.equal(result.status, 0, result.stderr);
@@ -46,6 +59,7 @@ test("ctx save/load/list/delete flow with explicit key", () => {
 
   result = runCli(["ctx", "save", "demo/zzz", "--value", "v2"], { env });
   assert.equal(result.status, 0, result.stderr);
+  assert.equal(countStoreEntryFiles(storePath), 2);
 
   result = runCli(["ctx", "list"], { env });
   assert.equal(result.status, 0, result.stderr);
@@ -58,6 +72,7 @@ test("ctx save/load/list/delete flow with explicit key", () => {
 
   result = runCli(["ctx", "delete", "demo/main"], { env });
   assert.equal(result.status, 0, result.stderr);
+  assert.equal(countStoreEntryFiles(storePath), 1);
 
   result = runCli(["ctx", "load", "demo/main"], { env });
   assert.notEqual(result.status, 0);
@@ -66,7 +81,7 @@ test("ctx save/load/list/delete flow with explicit key", () => {
 
 test("ctx key inference uses package.json name in git repository", () => {
   const dir = makeTempDir();
-  const storePath = path.join(dir, "store.json");
+  const storePath = path.join(dir, "store");
   const repoDir = path.join(dir, "repo");
   fs.mkdirSync(repoDir);
   fs.writeFileSync(path.join(repoDir, "package.json"), JSON.stringify({ name: "demo-pkg" }), "utf8");
@@ -92,14 +107,15 @@ test("ctx key inference uses package.json name in git repository", () => {
   assert.match(result.stdout, /^demo-pkg\/main\t--value$/m);
 });
 
-test("ctx commands fail fast on malformed local store JSON", () => {
+test("ctx commands fail fast on malformed local store entry filename", () => {
   const dir = makeTempDir();
-  const storePath = path.join(dir, "store.json");
-  fs.writeFileSync(storePath, "{invalid-json", "utf8");
+  const storePath = path.join(dir, "store");
+  fs.mkdirSync(storePath, { recursive: true });
+  fs.writeFileSync(path.join(storePath, "not-base64!.ctx"), "x", "utf8");
 
   const result = runCli(["ctx", "list"], { env: { CTXLOC_STORE_PATH: storePath } });
   assert.notEqual(result.status, 0);
-  assert.match(result.stderr, /CTXLOC_ERR IO: invalid JSON in store file/);
+  assert.match(result.stderr, /CTXLOC_ERR IO: invalid key filename in store/);
 });
 
 test("help and --help print bundled ctxloc skill", () => {
@@ -112,4 +128,26 @@ test("help and --help print bundled ctxloc skill", () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /name: ctxloc/);
   assert.match(result.stdout, /# ctxloc Skill/);
+});
+
+test("ctx save/load supports large payload via --file", () => {
+  const dir = makeTempDir();
+  const storePath = path.join(dir, "store");
+  const payloadPath = path.join(dir, "payload.md");
+  const env = { CTXLOC_STORE_PATH: storePath };
+  const payload = ("0123456789abcdef".repeat(16) + "\n").repeat(1024);
+  fs.writeFileSync(payloadPath, payload, "utf8");
+
+  let result = runCli(["ctx", "save", "big/main", "--file", payloadPath], { env });
+  assert.equal(result.status, 0, result.stderr);
+
+  result = runCli(["ctx", "load", "big/main"], { env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout, payload);
+});
+
+test("--missing is rejected for non-sync commands", () => {
+  const result = runCli(["ctx", "list", "--missing", "copy"]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /CTXLOC_ERR INVALID_INPUT: --missing is only valid for sync/);
 });

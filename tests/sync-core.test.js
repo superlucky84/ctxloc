@@ -59,3 +59,43 @@ test("planSync handles large keysets deterministically", () => {
   assert.equal(first.stats.skipped, 0);
   assert.deepEqual(first.operations, second.operations);
 });
+
+test("missing=delete removes local-only and remote-only keys instead of copying", () => {
+  const local = injectMetadata("local", { savedAt: "2026-02-16T12:00:00.000Z" });
+  const remote = injectMetadata("remote", { savedAt: "2026-02-16T12:00:00.000Z" });
+
+  const planned = planSync(
+    [{ key: "only/local", value: local }],
+    [{ key: "only/remote", value: remote }],
+    { missing: "delete" }
+  );
+
+  const localOnly = planned.operations.find((op) => op.key === "only/local");
+  const remoteOnly = planned.operations.find((op) => op.key === "only/remote");
+  assert(localOnly);
+  assert(remoteOnly);
+
+  assert.equal(localOnly.writeRemote, false);
+  assert.equal(localOnly.deleteLocal, true);
+  assert.equal(remoteOnly.writeLocal, false);
+  assert.equal(remoteOnly.deleteRemote, true);
+  assert.equal(planned.stats.localDeleted, 1);
+  assert.equal(planned.stats.remoteDeleted, 1);
+});
+
+test("missing=skip ignores one-sided keys", () => {
+  const local = injectMetadata("local", { savedAt: "2026-02-16T12:00:00.000Z" });
+  const remote = injectMetadata("remote", { savedAt: "2026-02-16T12:00:00.000Z" });
+
+  const planned = planSync(
+    [{ key: "only/local", value: local }],
+    [{ key: "only/remote", value: remote }],
+    { missing: "skip" }
+  );
+
+  assert.equal(planned.stats.localToRemote, 0);
+  assert.equal(planned.stats.remoteToLocal, 0);
+  assert.equal(planned.stats.localDeleted, 0);
+  assert.equal(planned.stats.remoteDeleted, 0);
+  assert.equal(planned.stats.skipped, 2);
+});

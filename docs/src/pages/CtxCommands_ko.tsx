@@ -58,7 +58,13 @@ $ npx ctxloc ctx delete my-project/main`}
 
       <h2>동기화</h2>
       <p><code>ctxloc sync</code>로 로컬 ctx와 원격 ctxbin 저장소를 동기화합니다.</p>
-      <CodeBlock language="bash" code={`$ npx ctxloc sync`} />
+      <CodeBlock
+        language="bash"
+        code={`$ npx ctxloc sync
+$ npx ctxloc sync --missing copy   # 기본값
+$ npx ctxloc sync --missing delete # 한쪽만 있는 키 삭제
+$ npx ctxloc sync --missing skip   # 한쪽만 있는 키 유지`}
+      />
     </div>
   );
 });

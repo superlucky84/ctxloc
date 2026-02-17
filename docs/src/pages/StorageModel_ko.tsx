@@ -7,16 +7,14 @@ export const StorageModelKo = mount(() => {
       <h1>저장소 모델</h1>
 
       <h2>로컬 저장소(기본)</h2>
-      <p>ctxloc은 로컬 JSON 파일에 ctx를 저장합니다.</p>
+      <p>ctxloc은 ctx 키 하나를 로컬 파일 하나로 저장합니다.</p>
       <CodeBlock
-        language="json"
-        code={`{
-  "ctx": {
-    "my-project/main": "ctxbin-meta@1\\n{...}\\n---\\nbody"
-  }
-}`}
+        language="text"
+        code={`디렉터리: ~/.ctxloc/store/
+파일명   : {base64url(key)}.ctx
+내용     : 메타데이터 + 본문`}
       />
-      <CodeBlock language="text" code={`기본 경로: ~/.ctxloc/store.json`} />
+      <CodeBlock language="text" code={`예시 키: my-project/main`} />
 
       <h2>원격 저장소(sync 대상)</h2>
       <p><code>ctxloc sync</code>는 <code>ctxbin</code> CLI 계약을 통해 원격 ctx를 읽고 씁니다.</p>

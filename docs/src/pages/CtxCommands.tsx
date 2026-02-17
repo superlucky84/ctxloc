@@ -65,7 +65,10 @@ $ npx ctxloc ctx delete my-project/main`}
       <p>Use <code>ctxloc sync</code> to synchronize local ctx with remote ctxbin storage.</p>
       <CodeBlock
         language="bash"
-        code={`$ npx ctxloc sync`}
+        code={`$ npx ctxloc sync
+$ npx ctxloc sync --missing copy   # default
+$ npx ctxloc sync --missing delete # remove one-sided keys
+$ npx ctxloc sync --missing skip   # keep one-sided keys`}
       />
     </div>
   );

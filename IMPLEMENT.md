@@ -47,16 +47,17 @@
 
 ### Implementation Checklist
 
-- [ ] Implement JSON-backed local adapter with methods `get`, `set`, `delete`, `list`.
-- [ ] Add bootstrapping logic to create `~/.ctxloc/store.json` on first write.
+- [ ] Implement file-per-key local adapter with methods `get`, `set`, `delete`, `list`.
+- [ ] Add bootstrapping logic to create `~/.ctxloc/store/` directory on first write.
+- [ ] Use base64url-encoded key as filename with `.ctx` extension.
 - [ ] Implement atomic writes via temp file + rename.
 - [ ] Enforce lexicographic ordering for `list`.
 
 ### Required Tests
 
-- [ ] Fresh install test: store file is created and writable.
-- [ ] Corrupted JSON test: command fails fast with IO/parsing error.
-- [ ] Atomicity test: interrupted write cannot leave partial JSON.
+- [ ] Fresh install test: store directory is created and writable.
+- [ ] Invalid filename test: command fails fast with IO error.
+- [ ] Atomicity test: interrupted write cannot leave partial file.
 - [ ] `list` ordering test: keys are sorted consistently.
 - [ ] UTF-8 preservation test for multilingual markdown bodies.
 

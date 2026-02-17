@@ -29,13 +29,38 @@ function readJson(filePath) {
   return JSON.parse(fs.readFileSync(filePath, "utf8"));
 }
 
+function localEntryPath(storeDir, key) {
+  const encoded = Buffer.from(key, "utf8").toString("base64url");
+  return path.join(storeDir, `${encoded}.ctx`);
+}
+
+function writeLocalEntries(storeDir, entries) {
+  fs.mkdirSync(storeDir, { recursive: true });
+  for (const [key, value] of Object.entries(entries)) {
+    fs.writeFileSync(localEntryPath(storeDir, key), value, "utf8");
+  }
+}
+
+function readLocalEntries(storeDir) {
+  const out = {};
+  const files = fs.existsSync(storeDir) ? fs.readdirSync(storeDir) : [];
+  for (const fileName of files) {
+    if (!fileName.endsWith(".ctx")) continue;
+    const encoded = fileName.slice(0, -4);
+    const key = Buffer.from(encoded, "base64url").toString("utf8");
+    out[key] = fs.readFileSync(path.join(storeDir, fileName), "utf8");
+  }
+  return out;
+}
+
 function createFakeCtxbinScript(scriptPath) {
-  const content = `
+const content = `
 const fs = require("node:fs");
 const storePath = process.env.FAKE_CTXBIN_STORE;
 const failList = process.env.FAKE_FAIL_LIST === "1";
 const failLoadKey = process.env.FAKE_FAIL_LOAD_KEY || "";
 const failSaveKey = process.env.FAKE_FAIL_SAVE_KEY || "";
+const failDeleteKey = process.env.FAKE_FAIL_DELETE_KEY || "";
 if (!storePath) {
   console.error("missing FAKE_CTXBIN_STORE");
   process.exit(1);
@@ -116,6 +141,20 @@ if (cmd === "save") {
   process.exit(0);
 }
 
+if (cmd === "delete") {
+  const key = args[2];
+  if (failDeleteKey && key === failDeleteKey) {
+    console.error("simulated delete failure for key: " + key);
+    process.exit(1);
+  }
+  const data = readStore();
+  if (data.ctx && Object.prototype.hasOwnProperty.call(data.ctx, key)) {
+    delete data.ctx[key];
+    writeStore(data);
+  }
+  process.exit(0);
+}
+
 console.error("unsupported command");
 process.exit(2);
 `;
@@ -125,7 +164,7 @@ process.exit(2);
 
 test("sync converges local and remote using winner rules", () => {
   const dir = makeTempDir();
-  const localPath = path.join(dir, "local-store.json");
+  const localPath = path.join(dir, "local-store");
   const remotePath = path.join(dir, "remote-store.json");
   const fakeCtxbinPath = path.join(dir, "fake-ctxbin.js");
   createFakeCtxbinScript(fakeCtxbinPath);
@@ -137,14 +176,12 @@ test("sync converges local and remote using winner rules", () => {
   const sameTsLocal = injectMetadata("tie-local", { savedAt: tBase });
   const sameTsRemote = injectMetadata("tie-remote", { savedAt: tBase });
 
-  writeJson(localPath, {
-    ctx: {
-      "only/local": injectMetadata("only-local", { savedAt: tOld }),
-      "conflict/newer-local": injectMetadata("newer-local", { savedAt: tNew }),
-      "legacy/remote": injectMetadata("meta-local", { savedAt: tOld }),
-      "tie/remote": sameTsLocal,
-      "equal/value": injectMetadata("equal", { savedAt: tOld }),
-    },
+  writeLocalEntries(localPath, {
+    "only/local": injectMetadata("only-local", { savedAt: tOld }),
+    "conflict/newer-local": injectMetadata("newer-local", { savedAt: tNew }),
+    "legacy/remote": injectMetadata("meta-local", { savedAt: tOld }),
+    "tie/remote": sameTsLocal,
+    "equal/value": injectMetadata("equal", { savedAt: tOld }),
   });
 
   writeJson(remotePath, {
@@ -172,7 +209,7 @@ test("sync converges local and remote using winner rules", () => {
   assert.match(result.stdout, /conflicts: 3/);
   assert.match(result.stdout, /skipped: 1/);
 
-  const local = readJson(localPath).ctx;
+  const local = readLocalEntries(localPath);
   const remote = readJson(remotePath).ctx;
   assert.deepEqual(local, remote);
   assert.equal(local["tie/remote"], sameTsRemote, "same timestamp should choose remote value");
@@ -181,15 +218,13 @@ test("sync converges local and remote using winner rules", () => {
 
 test("sync is idempotent on second run after convergence", () => {
   const dir = makeTempDir();
-  const localPath = path.join(dir, "local-store.json");
+  const localPath = path.join(dir, "local-store");
   const remotePath = path.join(dir, "remote-store.json");
   const fakeCtxbinPath = path.join(dir, "fake-ctxbin.js");
   createFakeCtxbinScript(fakeCtxbinPath);
 
-  writeJson(localPath, {
-    ctx: {
-      "only/local": injectMetadata("only-local", { savedAt: "2026-02-16T11:59:00.000Z" }),
-    },
+  writeLocalEntries(localPath, {
+    "only/local": injectMetadata("only-local", { savedAt: "2026-02-16T11:59:00.000Z" }),
   });
 
   writeJson(remotePath, {
@@ -219,15 +254,13 @@ test("sync is idempotent on second run after convergence", () => {
 
 test("sync fails fast when remote list command fails", () => {
   const dir = makeTempDir();
-  const localPath = path.join(dir, "local-store.json");
+  const localPath = path.join(dir, "local-store");
   const remotePath = path.join(dir, "remote-store.json");
   const fakeCtxbinPath = path.join(dir, "fake-ctxbin.js");
   createFakeCtxbinScript(fakeCtxbinPath);
 
-  writeJson(localPath, {
-    ctx: {
-      "only/local": injectMetadata("only-local", { savedAt: "2026-02-16T11:59:00.000Z" }),
-    },
+  writeLocalEntries(localPath, {
+    "only/local": injectMetadata("only-local", { savedAt: "2026-02-16T11:59:00.000Z" }),
   });
   writeJson(remotePath, { ctx: {} });
 
@@ -246,17 +279,15 @@ test("sync fails fast when remote list command fails", () => {
 
 test("sync reports partial apply counts when remote save fails mid-run", () => {
   const dir = makeTempDir();
-  const localPath = path.join(dir, "local-store.json");
+  const localPath = path.join(dir, "local-store");
   const remotePath = path.join(dir, "remote-store.json");
   const fakeCtxbinPath = path.join(dir, "fake-ctxbin.js");
   createFakeCtxbinScript(fakeCtxbinPath);
 
   const t = "2026-02-16T11:59:00.000Z";
-  writeJson(localPath, {
-    ctx: {
-      "a/ok": injectMetadata("ok", { savedAt: t }),
-      "b/fail": injectMetadata("fail", { savedAt: t }),
-    },
+  writeLocalEntries(localPath, {
+    "a/ok": injectMetadata("ok", { savedAt: t }),
+    "b/fail": injectMetadata("fail", { savedAt: t }),
   });
   writeJson(remotePath, { ctx: {} });
 
@@ -271,4 +302,75 @@ test("sync reports partial apply counts when remote save fails mid-run", () => {
   const result = runCli(["sync"], { env });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /CTXLOC_ERR IO: sync apply failed after remote_to_local=0, local_to_remote=1/);
+});
+
+test("sync --missing=delete removes one-sided keys from each side", () => {
+  const dir = makeTempDir();
+  const localPath = path.join(dir, "local-store");
+  const remotePath = path.join(dir, "remote-store.json");
+  const fakeCtxbinPath = path.join(dir, "fake-ctxbin.js");
+  createFakeCtxbinScript(fakeCtxbinPath);
+
+  writeLocalEntries(localPath, {
+    "only/local": injectMetadata("only-local", { savedAt: "2026-02-16T11:59:00.000Z" }),
+  });
+  writeJson(remotePath, {
+    ctx: {
+      "only/remote": injectMetadata("only-remote", { savedAt: "2026-02-16T11:59:00.000Z" }),
+    },
+  });
+
+  const env = {
+    CTXLOC_STORE_PATH: localPath,
+    CTXLOC_CTXBIN_BIN: process.execPath,
+    CTXLOC_CTXBIN_ARGS: fakeCtxbinPath,
+    FAKE_CTXBIN_STORE: remotePath,
+  };
+
+  const result = runCli(["sync", "--missing", "delete"], { env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /local_to_remote: 0/);
+  assert.match(result.stdout, /remote_to_local: 0/);
+  assert.match(result.stdout, /local_deleted: 1/);
+  assert.match(result.stdout, /remote_deleted: 1/);
+
+  assert.deepEqual(readLocalEntries(localPath), {});
+  assert.deepEqual(readJson(remotePath).ctx, {});
+});
+
+test("sync --missing=skip leaves one-sided keys untouched", () => {
+  const dir = makeTempDir();
+  const localPath = path.join(dir, "local-store");
+  const remotePath = path.join(dir, "remote-store.json");
+  const fakeCtxbinPath = path.join(dir, "fake-ctxbin.js");
+  createFakeCtxbinScript(fakeCtxbinPath);
+
+  const localOnlyValue = injectMetadata("only-local", { savedAt: "2026-02-16T11:59:00.000Z" });
+  const remoteOnlyValue = injectMetadata("only-remote", { savedAt: "2026-02-16T11:59:00.000Z" });
+  writeLocalEntries(localPath, { "only/local": localOnlyValue });
+  writeJson(remotePath, { ctx: { "only/remote": remoteOnlyValue } });
+
+  const env = {
+    CTXLOC_STORE_PATH: localPath,
+    CTXLOC_CTXBIN_BIN: process.execPath,
+    CTXLOC_CTXBIN_ARGS: fakeCtxbinPath,
+    FAKE_CTXBIN_STORE: remotePath,
+  };
+
+  const result = runCli(["sync", "--missing", "skip"], { env });
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(result.stdout, /local_to_remote: 0/);
+  assert.match(result.stdout, /remote_to_local: 0/);
+  assert.match(result.stdout, /local_deleted: 0/);
+  assert.match(result.stdout, /remote_deleted: 0/);
+  assert.match(result.stdout, /skipped: 2/);
+
+  assert.deepEqual(readLocalEntries(localPath), { "only/local": localOnlyValue });
+  assert.deepEqual(readJson(remotePath).ctx, { "only/remote": remoteOnlyValue });
+});
+
+test("sync rejects invalid --missing policy", () => {
+  const result = runCli(["sync", "--missing", "prompt"]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /CTXLOC_ERR INVALID_INPUT: --missing must be one of: "copy", "delete", "skip"/);
 });

@@ -5,7 +5,7 @@ Use `ctxloc` to manage local branch-scoped `ctx` and run bidirectional sync with
 
 ## Scope
 - `ctx` only (`agent` and `skill` are not supported in `ctxloc`)
-- Local storage file plus explicit sync to remote `ctxbin`
+- Local file-per-key storage plus explicit sync to remote `ctxbin`
 - Sync entrypoint is `ctxloc sync` only
 
 ## Core Usage
@@ -46,10 +46,14 @@ npx ctxloc ctx delete my-project/main
 
 ```bash
 npx ctxloc sync
+npx ctxloc sync --missing copy   # default
+npx ctxloc sync --missing delete # delete one-sided keys
+npx ctxloc sync --missing skip   # keep one-sided keys
 ```
 
 Behavior:
 - Compares local ctx store and remote `ctxbin` ctx store
+- Missing-key policy is controlled by `--missing` (default: `copy`)
 - For same key, newer `savedAt` wins
 - If one side has valid metadata and the other side is legacy/no-metadata, metadata side wins
 - If timestamps are equal but values differ, remote (`ctxbin`) wins

@@ -6,6 +6,7 @@ export type RemoteEntry = { key: string; value: string };
 export interface RemoteCtxStore {
   list(): Promise<RemoteEntry[]>;
   set(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
 }
 
 export function createCtxbinRemoteStore(): RemoteCtxStore {
@@ -27,6 +28,9 @@ export function createCtxbinRemoteStore(): RemoteCtxStore {
       await runCtxbinCommand(["ctx", "save", key, "--raw"], value, {
         CTXBIN_SUPPRESS_RAW_WARN: "1",
       });
+    },
+    async delete(key: string): Promise<void> {
+      await runCtxbinCommand(["ctx", "delete", key]);
     },
   };
 }

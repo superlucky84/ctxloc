@@ -2,6 +2,7 @@ import { extractSavedAtMs } from "./metadata";
 
 export type SyncSide = "local" | "remote";
 export type Winner = SyncSide | "equal";
+export type MissingPolicy = "copy" | "delete" | "skip";
 
 export type StoreEntry = {
   key: string;
@@ -24,6 +25,8 @@ export type PlannedOperation = {
   winningValue: string | null;
   writeLocal: boolean;
   writeRemote: boolean;
+  deleteLocal: boolean;
+  deleteRemote: boolean;
   conflict: boolean;
 };
 
@@ -31,6 +34,8 @@ export type SyncStats = {
   scanned: number;
   localToRemote: number;
   remoteToLocal: number;
+  localDeleted: number;
+  remoteDeleted: number;
   conflicts: number;
   skipped: number;
 };
@@ -40,7 +45,12 @@ export type PlannedSync = {
   stats: SyncStats;
 };
 
-export function planSync(localEntries: StoreEntry[], remoteEntries: StoreEntry[]): PlannedSync {
+export function planSync(
+  localEntries: StoreEntry[],
+  remoteEntries: StoreEntry[],
+  options: { missing?: MissingPolicy } = {}
+): PlannedSync {
+  const missingPolicy = options.missing ?? "copy";
   const localMap = new Map(localEntries.map((entry) => [entry.key, entry.value]));
   const remoteMap = new Map(remoteEntries.map((entry) => [entry.key, entry.value]));
   const keys = Array.from(new Set([...localMap.keys(), ...remoteMap.keys()])).sort((a, b) => a.localeCompare(b));
@@ -50,6 +60,8 @@ export function planSync(localEntries: StoreEntry[], remoteEntries: StoreEntry[]
     scanned: keys.length,
     localToRemote: 0,
     remoteToLocal: 0,
+    localDeleted: 0,
+    remoteDeleted: 0,
     conflicts: 0,
     skipped: 0,
   };
@@ -57,19 +69,28 @@ export function planSync(localEntries: StoreEntry[], remoteEntries: StoreEntry[]
   for (const key of keys) {
     const localValue = localMap.get(key);
     const remoteValue = remoteMap.get(key);
-    const operation = decideOperation(key, localValue, remoteValue);
+    const operation = decideOperation(key, localValue, remoteValue, missingPolicy);
     operations.push(operation);
 
     if (operation.conflict) stats.conflicts += 1;
     if (operation.writeRemote) stats.localToRemote += 1;
     if (operation.writeLocal) stats.remoteToLocal += 1;
-    if (!operation.writeLocal && !operation.writeRemote) stats.skipped += 1;
+    if (operation.deleteLocal) stats.localDeleted += 1;
+    if (operation.deleteRemote) stats.remoteDeleted += 1;
+    if (!operation.writeLocal && !operation.writeRemote && !operation.deleteLocal && !operation.deleteRemote) {
+      stats.skipped += 1;
+    }
   }
 
   return { operations, stats };
 }
 
-function decideOperation(key: string, localValue?: string, remoteValue?: string): PlannedOperation {
+function decideOperation(
+  key: string,
+  localValue: string | undefined,
+  remoteValue: string | undefined,
+  missingPolicy: MissingPolicy
+): PlannedOperation {
   if (localValue === undefined && remoteValue === undefined) {
     return {
       key,
@@ -78,32 +99,18 @@ function decideOperation(key: string, localValue?: string, remoteValue?: string)
       winningValue: null,
       writeLocal: false,
       writeRemote: false,
+      deleteLocal: false,
+      deleteRemote: false,
       conflict: false,
     };
   }
 
   if (remoteValue === undefined) {
-    return {
-      key,
-      winner: "local",
-      reason: "local_only",
-      winningValue: localValue ?? null,
-      writeLocal: false,
-      writeRemote: typeof localValue === "string",
-      conflict: false,
-    };
+    return decideLocalOnlyOperation(key, localValue, missingPolicy);
   }
 
   if (localValue === undefined) {
-    return {
-      key,
-      winner: "remote",
-      reason: "remote_only",
-      winningValue: remoteValue,
-      writeLocal: true,
-      writeRemote: false,
-      conflict: false,
-    };
+    return decideRemoteOnlyOperation(key, remoteValue, missingPolicy);
   }
 
   if (localValue === remoteValue) {
@@ -114,6 +121,8 @@ function decideOperation(key: string, localValue?: string, remoteValue?: string)
       winningValue: localValue,
       writeLocal: false,
       writeRemote: false,
+      deleteLocal: false,
+      deleteRemote: false,
       conflict: false,
     };
   }
@@ -130,6 +139,8 @@ function decideOperation(key: string, localValue?: string, remoteValue?: string)
         winningValue: localValue,
         writeLocal: false,
         writeRemote: true,
+        deleteLocal: false,
+        deleteRemote: false,
         conflict: true,
       };
     }
@@ -141,6 +152,8 @@ function decideOperation(key: string, localValue?: string, remoteValue?: string)
         winningValue: remoteValue,
         writeLocal: true,
         writeRemote: false,
+        deleteLocal: false,
+        deleteRemote: false,
         conflict: true,
       };
     }
@@ -151,6 +164,8 @@ function decideOperation(key: string, localValue?: string, remoteValue?: string)
       winningValue: remoteValue,
       writeLocal: true,
       writeRemote: false,
+      deleteLocal: false,
+      deleteRemote: false,
       conflict: true,
     };
   }
@@ -163,6 +178,8 @@ function decideOperation(key: string, localValue?: string, remoteValue?: string)
       winningValue: localValue,
       writeLocal: false,
       writeRemote: true,
+      deleteLocal: false,
+      deleteRemote: false,
       conflict: true,
     };
   }
@@ -175,6 +192,8 @@ function decideOperation(key: string, localValue?: string, remoteValue?: string)
       winningValue: remoteValue,
       writeLocal: true,
       writeRemote: false,
+      deleteLocal: false,
+      deleteRemote: false,
       conflict: true,
     };
   }
@@ -186,6 +205,92 @@ function decideOperation(key: string, localValue?: string, remoteValue?: string)
     winningValue: remoteValue,
     writeLocal: true,
     writeRemote: false,
+    deleteLocal: false,
+    deleteRemote: false,
     conflict: true,
+  };
+}
+
+function decideLocalOnlyOperation(key: string, localValue: string, missingPolicy: MissingPolicy): PlannedOperation {
+  if (missingPolicy === "skip") {
+    return {
+      key,
+      winner: "equal",
+      reason: "local_only",
+      winningValue: null,
+      writeLocal: false,
+      writeRemote: false,
+      deleteLocal: false,
+      deleteRemote: false,
+      conflict: false,
+    };
+  }
+
+  if (missingPolicy === "delete") {
+    return {
+      key,
+      winner: "equal",
+      reason: "local_only",
+      winningValue: null,
+      writeLocal: false,
+      writeRemote: false,
+      deleteLocal: true,
+      deleteRemote: false,
+      conflict: false,
+    };
+  }
+
+  return {
+    key,
+    winner: "local",
+    reason: "local_only",
+    winningValue: localValue,
+    writeLocal: false,
+    writeRemote: true,
+    deleteLocal: false,
+    deleteRemote: false,
+    conflict: false,
+  };
+}
+
+function decideRemoteOnlyOperation(key: string, remoteValue: string, missingPolicy: MissingPolicy): PlannedOperation {
+  if (missingPolicy === "skip") {
+    return {
+      key,
+      winner: "equal",
+      reason: "remote_only",
+      winningValue: null,
+      writeLocal: false,
+      writeRemote: false,
+      deleteLocal: false,
+      deleteRemote: false,
+      conflict: false,
+    };
+  }
+
+  if (missingPolicy === "delete") {
+    return {
+      key,
+      winner: "equal",
+      reason: "remote_only",
+      winningValue: null,
+      writeLocal: false,
+      writeRemote: false,
+      deleteLocal: false,
+      deleteRemote: true,
+      conflict: false,
+    };
+  }
+
+  return {
+    key,
+    winner: "remote",
+    reason: "remote_only",
+    winningValue: remoteValue,
+    writeLocal: true,
+    writeRemote: false,
+    deleteLocal: false,
+    deleteRemote: false,
+    conflict: false,
   };
 }
