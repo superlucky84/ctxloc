@@ -32,7 +32,7 @@
   ],
   "scripts": {
     "build": "tsup && node scripts/copy-skills.js",
-    "test": "pnpm build && node --test",
+    "test": "pnpm build && tsx --test tests/*.test.ts",
     "clean": "pnpm clean:dist && pnpm clean:module",
     "clean:dist": "rm -rf dist",
     "clean:module": "rm -rf dist node_modules"
@@ -43,6 +43,7 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "tsup": "^8.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.4.0"
   }
 }
